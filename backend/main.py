@@ -24,6 +24,7 @@ origins = [
     "http://localhost",
     "http://localhost:3000",
     "http://127.0.0.1:5500",
+    "https://proud-ground-0066a270f.6.azurestaticapps.net"
 ]
 
 app.add_middleware(
