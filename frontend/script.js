@@ -5,7 +5,7 @@ const chatWindow = document.getElementById('chat-window');
 
 // Define the URL of our backend API
 // This MUST match the port we exposed with Docker (-p 8000:80)
-const API_URL = 'http://localhost:8000/chat';
+const API_URL = 'https://my-unique-business-api.azurewebsites.net/chat';
 
 // Function to add a message to the chat window
 function addMessage(sender, text) {
