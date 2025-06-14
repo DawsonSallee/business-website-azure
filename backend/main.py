@@ -1,20 +1,14 @@
-import os
+import pyodbc
+from config import settings
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import google.generativeai as genai
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
 
-# Configure the Gemini API with your key
-try:
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-except Exception as e:
-    print(f"Error configuring Gemini API: {e}")
-    # In a real app, you might want to handle this more gracefully
-    # For now, we'll let it raise an error if the key is missing.
+# Load API key
+genai.configure(api_key=settings.google_api_key)
+
 
 # Create the FastAPI app instance
 app = FastAPI()
@@ -95,3 +89,57 @@ async def list_models():
         # If anything goes wrong, return a server error
         print(f"An error occurred: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate response from AI model.")
+    
+
+# --- New Database Endpoint ---
+
+class OrderStatusResponse(BaseModel):
+    customerNumber: int
+    customerName: str
+    mountPrice: float
+    boardPrice: float
+    balance: float
+    pickupDate: str | None # Can be a string or None if not set
+
+@app.get("/api/order-status/{customer_number}", response_model=OrderStatusResponse)
+async def get_order_status(customer_number: int):
+    """
+    Retrieves the status of an order from the database.
+    """
+    conn_str = (
+        f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+        f"SERVER={settings.db_server};"
+        f"DATABASE={settings.db_name};"
+        f"UID={settings.db_user};"
+        f"PWD={settings.db_password}"
+    )
+    
+    query = "SELECT CustomerNumber, CustomerName, MountPrice, BoardPrice, Balance, PickupDate FROM Orders WHERE CustomerNumber = ?"
+    
+    try:
+        with pyodbc.connect(conn_str, autocommit=True) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(query, customer_number)
+                row = cursor.fetchone()
+                
+                if not row:
+                    raise HTTPException(status_code=404, detail="Order not found")
+
+                # Convert the database row to our Pydantic response model
+                order_data = OrderStatusResponse(
+                    customerNumber=row.CustomerNumber,
+                    customerName=row.CustomerName,
+                    mountPrice=row.MountPrice,
+                    boardPrice=row.BoardPrice,
+                    balance=row.Balance,
+                    pickupDate=str(row.PickupDate) if row.PickupDate else None
+                )
+                return order_data
+
+    except pyodbc.Error as ex:
+        sqlstate = ex.args[0]
+        print(f"Database Error: {sqlstate}")
+        raise HTTPException(status_code=500, detail="Database connection error")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        raise HTTPException(status_code=500, detail="An internal server error occurred")
