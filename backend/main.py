@@ -96,17 +96,28 @@ async def list_models():
 class OrderStatusResponse(BaseModel):
     customerNumber: int
     customerName: str
+    phoneNumber: str | None
+    orderDate: str | None
+    species: str | None
+    boardType: str | None
     mountPrice: float
     boardPrice: float
+    depositCash: float
+    depositCheck: float
+    paymentCash: float
+    paymentCheck: float
+    readyDate: str | None
+    calledDate: str | None
+    pickupDate: str | None
     balance: float
-    pickupDate: str | None # Can be a string or None if not set
+    lastUpdatedAt: str
 
-# --- We change the path parameter from {customer_number} to {customer_name} ---
+
+# --- NEW, COMPLETE API Endpoint ---
 @app.get("/api/order-status/{customer_name}", response_model=OrderStatusResponse)
-# --- We change the function argument to accept a string (str) instead of an integer (int) ---
 async def get_order_status(customer_name: str):
     """
-    Retrieves the status of an order from the database by customer name.
+    Retrieves the complete status of an order from the database by customer name.
     """
     conn_str = (
         f"DRIVER={{ODBC Driver 18 for SQL Server}};"
@@ -116,17 +127,14 @@ async def get_order_status(customer_name: str):
         f"PWD={settings.db_password}"
     )
     
-    # --- We change the SQL query to search the CustomerName column ---
-    # We use 'LIKE' to make the search more flexible (e.g., ignores case sometimes, depending on DB settings)
-    query = "SELECT CustomerNumber, CustomerName, MountPrice, BoardPrice, Balance, PickupDate FROM Orders WHERE CustomerName LIKE ?"
+    # The query now selects every single column (*)
+    query = "SELECT * FROM Orders WHERE CustomerName LIKE '%' + ? + '%'"
     
-    # --- The rest of the logic can stay largely the same, but let's use our improved error handling ---
     row = None
     try:
         with pyodbc.connect(conn_str, autocommit=True) as conn:
             with conn.cursor() as cursor:
-                # We pass the customer_name to the execute method
-                cursor.execute(query, f"%{customer_name}%") # Using %wildcards% for a partial match
+                cursor.execute(query, customer_name)
                 row = cursor.fetchone()
 
     except Exception as e:
@@ -136,12 +144,28 @@ async def get_order_status(customer_name: str):
     if not row:
         raise HTTPException(status_code=404, detail=f"Order with customer name '{customer_name}' not found.")
 
+    # Helper function to safely convert dates to strings
+    def format_date(date_obj):
+        return str(date_obj) if date_obj else None
+
+    # We now map every column from the database row to our Pydantic model
     order_data = OrderStatusResponse(
         customerNumber=row.CustomerNumber,
         customerName=row.CustomerName,
+        phoneNumber=row.PhoneNumber,
+        orderDate=format_date(row.OrderDate),
+        species=row.Species,
+        boardType=row.BoardType,
         mountPrice=row.MountPrice,
         boardPrice=row.BoardPrice,
+        depositCash=row.DepositCash,
+        depositCheck=row.DepositCheck,
+        paymentCash=row.PaymentCash,
+        paymentCheck=row.PaymentCheck,
+        readyDate=format_date(row.ReadyDate),
+        calledDate=format_date(row.CalledDate),
+        pickupDate=format_date(row.PickupDate),
         balance=row.Balance,
-        pickupDate=str(row.PickupDate) if row.PickupDate else None
+        lastUpdatedAt=format_date(row.LastUpdatedAt)
     )
     return order_data
