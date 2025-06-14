@@ -1,30 +1,39 @@
-# Stage 1: Use an official Python runtime as a parent image
-# We use a "slim" version because it's smaller and more secure.
-FROM python:3.11-slim
+# Use a specific and common base image
+FROM python:3.11-slim-bullseye
 
-# Stage 2: Set the working directory inside the container
-# All subsequent commands will run from this path.
+# Install prerequisites for adding new repositories and for the driver
+RUN apt-get update && apt-get install -y \
+    curl \
+    gnupg \
+    apt-transport-https \
+    unixodbc-dev
+
+# Add Microsoft's GPG key
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
+
+# Add the Microsoft products repository for Debian 11 (Bullseye)
+RUN curl https://packages.microsoft.com/config/debian/11/prod.list > /etc/apt/sources.list.d/mssql-release.list
+
+# Update the package list again to include the new repository
+RUN apt-get update
+
+# Install the ODBC driver, accepting the EULA automatically
+RUN ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
+# --- The rest of the Dockerfile is the same ---
+
+# Set the working directory
 WORKDIR /app
 
-# Stage 3: Copy only the requirements file first
-# This is a Docker caching optimization. If requirements.txt doesn't change,
-# Docker won't re-run the pip install step on subsequent builds, making them much faster.
+# Copy requirements and install Python packages
 COPY requirements.txt .
-
-# Stage 4: Install the Python dependencies
-# --no-cache-dir makes the image smaller.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Stage 5: Copy the rest of your application code into the container
-# This includes main.py, .env, and any other files.
+# Copy the application code
 COPY . .
 
-# Stage 6: Expose the port the app runs on
-# Our app inside the container will listen on port 80.
+# Expose the port
 EXPOSE 80
 
-# Stage 7: Define the command to run your app
-# This is the command that will be executed when the container starts.
-# We use "--host 0.0.0.0" to make the server accessible from outside the container.
-# Azure App Service expects applications to listen on port 80 by default.
+# Define the run command
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
