@@ -101,10 +101,12 @@ class OrderStatusResponse(BaseModel):
     balance: float
     pickupDate: str | None # Can be a string or None if not set
 
-@app.get("/api/order-status/{customer_number}", response_model=OrderStatusResponse)
-async def get_order_status(customer_number: int):
+# --- We change the path parameter from {customer_number} to {customer_name} ---
+@app.get("/api/order-status/{customer_name}", response_model=OrderStatusResponse)
+# --- We change the function argument to accept a string (str) instead of an integer (int) ---
+async def get_order_status(customer_name: str):
     """
-    Retrieves the status of an order from the database.
+    Retrieves the status of an order from the database by customer name.
     """
     conn_str = (
         f"DRIVER={{ODBC Driver 18 for SQL Server}};"
@@ -114,32 +116,32 @@ async def get_order_status(customer_number: int):
         f"PWD={settings.db_password}"
     )
     
-    query = "SELECT CustomerNumber, CustomerName, MountPrice, BoardPrice, Balance, PickupDate FROM Orders WHERE CustomerNumber = ?"
+    # --- We change the SQL query to search the CustomerName column ---
+    # We use 'LIKE' to make the search more flexible (e.g., ignores case sometimes, depending on DB settings)
+    query = "SELECT CustomerNumber, CustomerName, MountPrice, BoardPrice, Balance, PickupDate FROM Orders WHERE CustomerName LIKE ?"
     
+    # --- The rest of the logic can stay largely the same, but let's use our improved error handling ---
+    row = None
     try:
         with pyodbc.connect(conn_str, autocommit=True) as conn:
             with conn.cursor() as cursor:
-                cursor.execute(query, customer_number)
+                # We pass the customer_name to the execute method
+                cursor.execute(query, f"%{customer_name}%") # Using %wildcards% for a partial match
                 row = cursor.fetchone()
-                
-                if not row:
-                    raise HTTPException(status_code=404, detail="Order not found")
 
-                # Convert the database row to our Pydantic response model
-                order_data = OrderStatusResponse(
-                    customerNumber=row.CustomerNumber,
-                    customerName=row.CustomerName,
-                    mountPrice=row.MountPrice,
-                    boardPrice=row.BoardPrice,
-                    balance=row.Balance,
-                    pickupDate=str(row.PickupDate) if row.PickupDate else None
-                )
-                return order_data
-
-    except pyodbc.Error as ex:
-        sqlstate = ex.args[0]
-        print(f"Database Error: {sqlstate}")
-        raise HTTPException(status_code=500, detail="Database connection error")
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        raise HTTPException(status_code=500, detail="An internal server error occurred")
+        print(f"An error occurred during DB query: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed")
+
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Order with customer name '{customer_name}' not found.")
+
+    order_data = OrderStatusResponse(
+        customerNumber=row.CustomerNumber,
+        customerName=row.CustomerName,
+        mountPrice=row.MountPrice,
+        boardPrice=row.BoardPrice,
+        balance=row.Balance,
+        pickupDate=str(row.PickupDate) if row.PickupDate else None
+    )
+    return order_data
