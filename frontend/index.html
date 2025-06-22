@@ -14,6 +14,46 @@
 	</head>
 	<body class="is-preload">
 
+	 <style>
+        #chat-window {
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            padding: 1em;
+            height: 40vh;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 1em;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-message {
+            padding: 0.5em 1em;
+            border-radius: 12px;
+            margin-bottom: 0.5em;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            text-align: right;
+        }
+        .assistant-message {
+            background-color: #333;
+            color: #f4f4f4;
+            align-self: flex-start;
+        }
+        .chat-message p {
+            margin: 0;
+        }
+        #chat-form .field {
+            margin-bottom: 0;
+        }
+    </style>
+    <!-- END: CHAT CSS -->
+
 		<!-- Wrapper -->
 			<div id="wrapper">
 
@@ -156,6 +196,39 @@
 										<li>Adjustable angles for dynamic presentation</li>
 									</ul>
 								</article>
+
+								  <!-- =================================================================== -->
+						<!-- START: PASTE THE NEW AI CHAT ARTICLE HERE                           -->
+						<!-- =================================================================== -->
+						<article id="aichat">
+							<h2 class="major">Speak to a Representative</h2>
+							<p>Our AI assistant can answer questions about our services, hours, and pricing, or look up your order status. Just ask!</p>
+							
+							<!-- This is the container where chat messages will appear -->
+							<div id="chat-window">
+								<div class="chat-message assistant-message">
+									<p>Hello! How can I help you today?</p>
+								</div>
+							</div>
+							
+							<!-- This is the form for user input -->
+							<form id="chat-form">
+								<div class="fields">
+									<div class="field">
+										<input type="text" id="chat-input" required placeholder="Type your message..." autocomplete="off" />
+									</div>
+								</div>
+								<ul class="actions">
+									<li><button type="submit" id="chat-submit-button" class="primary">Send</button></li>
+								</ul>
+							</form>
+
+							<!-- Load the JavaScript for the chat agent -->
+							<script src="assets/js/chat-agent.js"></script>
+						</article>
+						<!-- =================================================================== -->
+						<!-- END: AI CHAT ARTICLE                                                -->
+						<!-- =================================================================== -->
 
 						<!-- Contact -->
 							<article id="contact">
