@@ -4,6 +4,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import google.generativeai as genai
+from azure.ai.projects import AIProjectClient
+from azure.identity import DefaultAzureCredential
+import httpx
 
 
 # Load API key
@@ -93,88 +96,58 @@ async def list_models():
 
 # --- New Database Endpoint ---
 
+# This Pydantic model now exactly matches the `result` dictionary
+# in your GetOrderStatusFuzzy function code.
 class OrderStatusResponse(BaseModel):
-    customerNumber: int
     customerName: str
-    phoneNumber: str | None
     orderDate: str | None
-    species: str | None
-    boardType: str | None
+    readyDate: str | None
+    calledDate: str | None
+    pickupDate: str | None
     mountPrice: float
     boardPrice: float
     depositCash: float
     depositCheck: float
     paymentCash: float
     paymentCheck: float
-    readyDate: str | None
-    calledDate: str | None
-    pickupDate: str | None
     balance: float
-    lastUpdatedAt: str
+    lastUpdatedAt: str | None
 
-
-# --- NEW, COMPLETE API Endpoint ---
 @app.get("/api/order-status/{customer_name}", response_model=OrderStatusResponse)
 async def get_order_status(customer_name: str):
     """
-    Retrieves the complete status of an order from the database by customer name.
+    Acts as a proxy to call the GetOrderStatusFuzzy Azure Function.
     """
-    conn_str = (
-        f"DRIVER={{ODBC Driver 18 for SQL Server}};"
-        f"SERVER={settings.db_server};"
-        f"DATABASE={settings.db_name};"
-        f"UID={settings.db_user};"
-        f"PWD={settings.db_password}"
-    )
+    # The full URL to the function, with the customer_name in the query string
+    target_url = f"{settings.function_url}?customer_name={customer_name}"
     
-    # The query now selects every single column (*)
-    query = "SELECT * FROM Orders WHERE CustomerName LIKE '%' + ? + '%'"
-    
-    row = None
+    # Headers are empty because the function is anonymous and requires no key
+    headers = {}
+
     try:
-        with pyodbc.connect(conn_str, autocommit=True) as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(query, customer_name)
-                row = cursor.fetchone()
+        # Use an async client to make the network call without blocking our server
+        async with httpx.AsyncClient() as client:
+            # Make the GET request to the Azure Function
+            response = await client.get(target_url, headers=headers)
 
+            # If the function returned an error (e.g., 404 Not Found),
+            # raise an HTTPException in our own API with the same status and detail.
+            if response.status_code != 200:
+                error_detail = response.json().get("detail", response.text)
+                raise HTTPException(status_code=response.status_code, detail=error_detail)
+
+            # If successful, return the JSON data from the function. FastAPI will
+            # automatically validate it against our new, correct OrderStatusResponse model.
+            return response.json()
+
+    except httpx.RequestError as e:
+        # This catches network problems (e.g., can't connect to the function)
+        print(f"HTTP request to Azure Function failed: {e}")
+        raise HTTPException(status_code=503, detail="Service unavailable: Could not connect to the order status service.")
     except Exception as e:
-        print(f"An error occurred during DB query: {e}")
-        raise HTTPException(status_code=500, detail="Database query failed")
-
-    if not row:
-        raise HTTPException(status_code=404, detail=f"Order with customer name '{customer_name}' not found.")
-
-    # Helper function to safely convert dates to strings
-    def format_date(date_obj):
-        return str(date_obj) if date_obj else None
-
-    # We now map every column from the database row to our Pydantic model
-    order_data = OrderStatusResponse(
-        customerNumber=row.CustomerNumber,
-        customerName=row.CustomerName,
-        phoneNumber=row.PhoneNumber,
-        orderDate=format_date(row.OrderDate),
-        species=row.Species,
-        boardType=row.BoardType,
-        mountPrice=row.MountPrice,
-        boardPrice=row.BoardPrice,
-        depositCash=row.DepositCash,
-        depositCheck=row.DepositCheck,
-        paymentCash=row.PaymentCash,
-        paymentCheck=row.PaymentCheck,
-        readyDate=format_date(row.ReadyDate),
-        calledDate=format_date(row.CalledDate),
-        pickupDate=format_date(row.PickupDate),
-        balance=row.Balance,
-        lastUpdatedAt=format_date(row.LastUpdatedAt)
-    )
-    return order_data
-
-# =================================================================
-# START: NEW AZURE AGENT PROXY ENDPOINT
-# =================================================================
-from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
+        # This catches any other unexpected errors during the process
+        print(f"An unexpected error occurred: {e}")
+        raise HTTPException(status_code=500, detail="An internal server error occurred.")
 
 # --- Pydantic Models for the new endpoint ---
 class AgentChatRequest(BaseModel):
@@ -241,6 +214,3 @@ async def chat_proxy_to_azure_agent(request: AgentChatRequest):
     except Exception as e:
         print(f"An error occurred while calling the Azure Agent: {e}")
         raise HTTPException(status_code=500, detail="Failed to communicate with the AI agent.")
-# =================================================================
-# END: NEW AZURE AGENT PROXY ENDPOINT
-# =================================================================

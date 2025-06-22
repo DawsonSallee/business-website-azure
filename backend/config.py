@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     db_name: str
     db_user: str
     db_password: str
+    function_url: str
 
 # Create a single, reusable instance of the settings
 settings = Settings()
