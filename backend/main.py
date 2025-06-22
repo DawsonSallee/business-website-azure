@@ -116,36 +116,58 @@ class OrderStatusResponse(BaseModel):
 @app.get("/api/order-status/{customer_name}", response_model=OrderStatusResponse)
 async def get_order_status(customer_name: str):
     """
-    Acts as a proxy to call the GetOrderStatusFuzzy Azure Function.
+    Acts as a proxy to call the GetOrderStatusFuzzy Azure Function,
+    and then robustly cleans the returned data before validation.
     """
-    # The full URL to the function, with the customer_name in the query string
     target_url = f"{settings.function_url}?customer_name={customer_name}"
-    
-    # Headers are empty because the function is anonymous and requires no key
     headers = {}
 
     try:
-        # Use an async client to make the network call without blocking our server
         async with httpx.AsyncClient() as client:
-            # Make the GET request to the Azure Function
             response = await client.get(target_url, headers=headers)
 
-            # If the function returned an error (e.g., 404 Not Found),
-            # raise an HTTPException in our own API with the same status and detail.
             if response.status_code != 200:
                 error_detail = response.json().get("detail", response.text)
                 raise HTTPException(status_code=response.status_code, detail=error_detail)
 
-            # If successful, return the JSON data from the function. FastAPI will
-            # automatically validate it against our new, correct OrderStatusResponse model.
-            return response.json()
+            # Get the raw JSON data from the function, which we know might be messy.
+            messy_data = response.json()
+
+            # Define our own robust cleaning function right here.
+            def to_float(value):
+                if value is None or value == '':
+                    return 0.0
+                try:
+                    return float(value)
+                except (ValueError, TypeError):
+                    return 0.0
+
+            # Create a new, clean dictionary by applying the fix to every field.
+            # The .get() method safely handles missing keys from the messy data.
+            clean_data = {
+                "customerName": messy_data.get("customerName"),
+                "orderDate": messy_data.get("orderDate"),
+                "readyDate": messy_data.get("readyDate"),
+                "calledDate": messy_data.get("calledDate"),
+                "pickupDate": messy_data.get("pickupDate"),
+                "mountPrice": to_float(messy_data.get("mountPrice")),
+                "boardPrice": to_float(messy_data.get("boardPrice")),
+                "depositCash": to_float(messy_data.get("depositCash")),
+                "depositCheck": to_float(messy_data.get("depositCheck")),
+                "paymentCash": to_float(messy_data.get("paymentCash")),
+                "paymentCheck": to_float(messy_data.get("paymentCheck")),
+                "balance": to_float(messy_data.get("balance")),
+                "lastUpdatedAt": messy_data.get("lastUpdatedAt")
+            }
+            
+            # Now, return the CLEAN data. FastAPI's automatic validation will
+            # run on this clean_data dictionary and it will succeed.
+            return clean_data
 
     except httpx.RequestError as e:
-        # This catches network problems (e.g., can't connect to the function)
         print(f"HTTP request to Azure Function failed: {e}")
         raise HTTPException(status_code=503, detail="Service unavailable: Could not connect to the order status service.")
     except Exception as e:
-        # This catches any other unexpected errors during the process
         print(f"An unexpected error occurred: {e}")
         raise HTTPException(status_code=500, detail="An internal server error occurred.")
 
