@@ -169,3 +169,78 @@ async def get_order_status(customer_name: str):
         lastUpdatedAt=format_date(row.LastUpdatedAt)
     )
     return order_data
+
+# =================================================================
+# START: NEW AZURE AGENT PROXY ENDPOINT
+# =================================================================
+from azure.ai.projects import AIProjectClient
+from azure.identity import DefaultAzureCredential
+
+# --- Pydantic Models for the new endpoint ---
+class AgentChatRequest(BaseModel):
+    message: str
+
+class AgentChatResponse(BaseModel):
+    reply: str
+
+@app.post("/api/chat-with-agent", response_model=AgentChatResponse)
+async def chat_proxy_to_azure_agent(request: AgentChatRequest):
+    """
+    This endpoint acts as a secure proxy to the Azure Agent.
+    It takes a user's message and uses the Azure SDK to get a reply.
+    """
+    try:
+        # 1. Connect to your Azure AI Project using the secure DefaultAzureCredential
+        #    This automatically finds your credentials from your environment.
+        project = AIProjectClient(
+            credential=DefaultAzureCredential(),
+            endpoint="https://businessaiagents-resource.services.ai.azure.com/api/projects/businessaiagents"
+        )
+
+        # 2. Get a reference to your specific agent by its ID
+        #    (You can hard-code this ID from the Azure portal)
+        agent = project.agents.get_agent("asst_k3iT84MhPHG4sk7jhMb3eDzv")
+
+        # 3. Create a new, clean conversation thread for this interaction
+        thread = project.agents.threads.create()
+
+        # 4. Add the user's message to the new thread
+        project.agents.messages.create(
+            thread_id=thread.id,
+            role="user",
+            content=request.message # Use the message from the frontend request
+        )
+
+        # 5. Run the agent and wait for it to process the message
+        run = project.agents.runs.create_and_process(
+            thread_id=thread.id,
+            agent_id=agent.id
+        )
+
+        if run.status == "failed":
+            print(f"Azure Agent run failed: {run.last_error}")
+            raise HTTPException(status_code=500, detail="The AI agent failed to process the request.")
+
+        # 6. Get all messages from the thread to find the assistant's reply
+        messages = project.agents.messages.list(thread_id=thread.id)
+        
+        # 7. Find the last message from the assistant and extract its text
+        assistant_reply = "Sorry, I couldn't get a response."
+        for message in messages:
+            # The agent's response is the first message where the role is 'assistant'
+            if message.role == "assistant" and message.text_messages:
+                assistant_reply = message.text_messages[-1].text.value
+                break # We found the reply, so we can stop looking
+
+        # 8. Clean up the thread we created
+        project.agents.threads.delete(thread.id)
+
+        # 9. Send the clean text reply back to our frontend
+        return AgentChatResponse(reply=assistant_reply)
+
+    except Exception as e:
+        print(f"An error occurred while calling the Azure Agent: {e}")
+        raise HTTPException(status_code=500, detail="Failed to communicate with the AI agent.")
+# =================================================================
+# END: NEW AZURE AGENT PROXY ENDPOINT
+# =================================================================
