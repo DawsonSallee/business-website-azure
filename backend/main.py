@@ -113,62 +113,81 @@ class OrderStatusResponse(BaseModel):
     balance: float
     lastUpdatedAt: str | None
 
+# In backend/main.py
+
 @app.get("/api/order-status/{customer_name}", response_model=OrderStatusResponse)
 async def get_order_status(customer_name: str):
     """
-    Acts as a proxy to call the GetOrderStatusFuzzy Azure Function,
-    and then robustly cleans the returned data before validation.
+    Acts as a secure proxy to call the GetOrderStatusFuzzy Azure Function.
+    It authenticates using an API key and then robustly cleans the
+    returned data before validation.
     """
     target_url = f"{settings.function_url}?customer_name={customer_name}"
-    headers = {}
+
+    # 1. THE SECURITY CHANGE: Prepare the headers with the secret key.
+    #    'x-functions-key' is the specific header name Azure Functions requires.
+    headers = {
+        'x-functions-key': settings.function_key
+    }
 
     try:
         async with httpx.AsyncClient() as client:
+            # 2. THE EXECUTION CHANGE: Send the request WITH the headers.
             response = await client.get(target_url, headers=headers)
 
-            if response.status_code != 200:
-                error_detail = response.json().get("detail", response.text)
-                raise HTTPException(status_code=response.status_code, detail=error_detail)
+            # A more robust way to check for errors. This will automatically raise
+            # an exception for any 4xx (client) or 5xx (server) error codes.
+            response.raise_for_status()
 
-            # Get the raw JSON data from the function, which we know might be messy.
+            # If we get here, the request was successful (status 200 OK).
             messy_data = response.json()
 
-            # Define our own robust cleaning function right here.
-            def to_float(value):
-                if value is None or value == '':
-                    return 0.0
-                try:
-                    return float(value)
-                except (ValueError, TypeError):
-                    return 0.0
+        # --- This data cleaning logic is from our previous fix and is still correct ---
+        def to_float(value):
+            if value is None or value == '':
+                return 0.0
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return 0.0
 
-            # Create a new, clean dictionary by applying the fix to every field.
-            # The .get() method safely handles missing keys from the messy data.
-            clean_data = {
-                "customerName": messy_data.get("customerName"),
-                "orderDate": messy_data.get("orderDate"),
-                "readyDate": messy_data.get("readyDate"),
-                "calledDate": messy_data.get("calledDate"),
-                "pickupDate": messy_data.get("pickupDate"),
-                "mountPrice": to_float(messy_data.get("mountPrice")),
-                "boardPrice": to_float(messy_data.get("boardPrice")),
-                "depositCash": to_float(messy_data.get("depositCash")),
-                "depositCheck": to_float(messy_data.get("depositCheck")),
-                "paymentCash": to_float(messy_data.get("paymentCash")),
-                "paymentCheck": to_float(messy_data.get("paymentCheck")),
-                "balance": to_float(messy_data.get("balance")),
-                "lastUpdatedAt": messy_data.get("lastUpdatedAt")
-            }
-            
-            # Now, return the CLEAN data. FastAPI's automatic validation will
-            # run on this clean_data dictionary and it will succeed.
-            return clean_data
+        # Create the clean dictionary, safely getting values and cleaning numbers.
+        clean_data = {
+            "customerNumber": messy_data.get("customerNumber"), # Assuming function returns this
+            "customerName": messy_data.get("customerName"),
+            "phoneNumber": messy_data.get("phoneNumber"),
+            "orderDate": messy_data.get("orderDate"),
+            "species": messy_data.get("species"),
+            "boardType": messy_data.get("boardType"),
+            "mountPrice": to_float(messy_data.get("mountPrice")),
+            "boardPrice": to_float(messy_data.get("boardPrice")),
+            "depositCash": to_float(messy_data.get("depositCash")),
+            "depositCheck": to_float(messy_data.get("depositCheck")),
+            "paymentCash": to_float(messy_data.get("paymentCash")),
+            "paymentCheck": to_float(messy_data.get("paymentCheck")),
+            "readyDate": messy_data.get("readyDate"),
+            "calledDate": messy_data.get("calledDate"),
+            "pickupDate": messy_data.get("pickupDate"),
+            "balance": to_float(messy_data.get("balance")),
+            "lastUpdatedAt": messy_data.get("lastUpdatedAt")
+        }
+        
+        # FastAPI's Pydantic model will validate this clean dictionary.
+        return clean_data
 
+    # This will catch network errors (e.g., function app is down)
     except httpx.RequestError as e:
         print(f"HTTP request to Azure Function failed: {e}")
         raise HTTPException(status_code=503, detail="Service unavailable: Could not connect to the order status service.")
+    
+    # This will catch the 4xx/5xx errors raised by response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        error_detail = e.response.json().get("detail", e.response.text)
+        print(f"Azure Function returned an error: {e.response.status_code} - {error_detail}")
+        raise HTTPException(status_code=e.response.status_code, detail=error_detail)
+
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        print(f"An unexpected error occurred in get_order_status: {e}")
         raise HTTPException(status_code=500, detail="An internal server error occurred.")
 
 # --- Pydantic Models for the new endpoint ---
