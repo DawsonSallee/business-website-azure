@@ -1664,11 +1664,39 @@ input, select, textarea {
 /* === My Custom Mobile Fixes === */
 /* ================================== */
 
-/* This rule will override the template's default behavior for the major heading. */
-h2.major {
-    /* Reset the width so it can be flexible and fit the screen. */
-    width: auto; 
-    
-    /* Explicitly allow the text to wrap. */
-    white-space: normal;
-}
+        #chat-window {
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            padding: 1em;
+            height: 40vh;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 1em;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-message {
+            padding: 0.5em 1em;
+            border-radius: 12px;
+            margin-bottom: 0.5em;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            text-align: right;
+        }
+        .assistant-message {
+            background-color: #333;
+            color: #f4f4f4;
+            align-self: flex-start;
+        }
+        .chat-message p {
+            margin: 0;
+        }
+        #chat-form .field {
+            margin-bottom: 0;
+        }
