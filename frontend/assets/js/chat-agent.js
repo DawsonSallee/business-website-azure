@@ -1,19 +1,21 @@
+// This event listener ensures that our code only runs after the entire
+// HTML page has been loaded and is ready.
 document.addEventListener('DOMContentLoaded', function() {
-    // =================================================================
-    // IMPORTANT: REPLACE THESE VALUES WITH YOUR DEPLOYED AGENT DETAILS
-    // =================================================================
-    // 1. Get this from the "Consume" tab of your deployed agent in Azure AI Studio
-    const AGENT_PROXY_ENDPOINT = "https://my-unique-business-api.azurewebsites.net/api/chat-with-agent"; 
-    // =================================================================
 
-    // --- DOM Element References ---
+    // This is the URL of our secure backend proxy. The frontend only ever
+    // talks to this single endpoint for all AI chat interactions.
+    const AGENT_PROXY_ENDPOINT = "https://my-unique-business-api.azurewebsites.net/api/chat-with-agent"; 
+
+
+    // We get references to all the parts of our chat interface once, at the start
     const chatWindow = document.getElementById('chat-window');
     const chatForm = document.getElementById('chat-form');
     const chatInput = document.getElementById('chat-input');
     const chatSubmitButton = document.getElementById('chat-submit-button');
 
+    // A safety check. If any chat elements are missing from the HTML,
+    // we stop executing to prevent errors.
     if (!chatWindow || !chatForm || !chatInput) {
-        // If the chat elements aren't on the page, do nothing.
         return;
     }
 
@@ -68,7 +70,6 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('Failed to fetch from agent:', error);
         assistantMessageElement.innerHTML = `<p style="color: #ff7b7b;">Sorry, an error occurred. Please try again later.</p>`;
     } finally {
-        // This part is also fine
         setFormDisabled(false);
         scrollToBottom(); // Call this to make sure the view scrolls down
         chatInput.focus();
