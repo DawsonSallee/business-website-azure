@@ -1,22 +1,31 @@
-import pyodbc
-from config import settings
+# ==============================================================================
+# main.py
+#
+# This file defines the backend API for the business website.
+# It uses the FastAPI framework to create two primary endpoints:
+# 1. A direct proxy to an Azure Function for simple order status lookups.
+# 2. A secure proxy to a powerful Azure AI Agent for handling complex chat.
+# ==============================================================================
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import google.generativeai as genai
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 import httpx
+from config import settings
 
+# ==============================================================================
+# 2. APP INITIALIZATION & MIDDLEWARE
+# Here, we create the main FastAPI application instance and configure its
+# global security settings, such as Cross-Origin Resource Sharing (CORS).
+# ==============================================================================
+app = FastAPI(title="Business Website Backend API")
 
-# Load API key
-genai.configure(api_key=settings.google_api_key)
-
-
-# Create the FastAPI app instance
-app = FastAPI()
-
-# --- CORS Middleware ---
+# --------- CORS Middleware ---------
+# The origins list acts as a security whitelist. Only websites on this list
+# are allowed to make requests to this API. This prevents other malicious
+# sites from using your backend.
 origins = [
     "http://localhost",
     "http://localhost:3000",
@@ -32,72 +41,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Pydantic Models ---
-class ChatRequest(BaseModel):
-    message: str
-    # You could add history here later: history: list = []
-
-class ChatResponse(BaseModel):
-    reply: str
-
-
-# --- API Endpoints ---
-@app.get("/")
-def read_root():
-    """A simple endpoint to check if the server is running."""
-    return {"Status": "Online"}
-
-
-@app.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
-    """
-    The main endpoint for the chatbot.
-    Accepts a user's message and returns the AI's reply.
-    """
-    try:
-        # Initialize the Generative Model
-        model = genai.GenerativeModel('gemini-1.5-flash')
-
-        # --- TODO: Add your RAG logic here ---
-        # 1. For now, we are just sending the message directly to the model.
-        # 2. Later, you will first retrieve relevant context from your documents
-        #    and then create a more detailed prompt like:
-        #    prompt = f"Context: {retrieved_context}\n\nQuestion: {request.message}\n\nAnswer:"
-        
-        prompt = request.message
-
-        # Generate content
-        response = model.generate_content(prompt)
-
-        # Return the generated text
-        return ChatResponse(reply=response.text)
-    except Exception as e:
-        # If anything goes wrong, return a server error
-        print(f"An error occurred: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate response from AI model.")
-
-@app.get("/models")
-async def list_models():
-    """An endpoint to list all available Gemini models."""
-    try:
-        model_list = []
-        for m in genai.list_models():
-            # We only care about models that support the 'generateContent' method
-            if 'generateContent' in m.supported_generation_methods:
-                model_list.append({"name": m.name, "description": m.description})
-        return {"models": model_list}
-
-
-    except Exception as e:
-        # If anything goes wrong, return a server error
-        print(f"An error occurred: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate response from AI model.")
-    
-
-# --- New Database Endpoint ---
-
-# This Pydantic model now exactly matches the `result` dictionary
-# in your GetOrderStatusFuzzy function code.
+# ==============================================================================
+# 3. PYDANTIC MODELS (Data Contracts)
+# These classes define the expected JSON structure for API requests and
+# responses. FastAPI uses them to automatically validate data, which is a
+# key security and reliability feature.
+# =============================================================================
 class OrderStatusResponse(BaseModel):
     customerName: str
     orderDate: str | None
@@ -113,24 +62,37 @@ class OrderStatusResponse(BaseModel):
     balance: float
     lastUpdatedAt: str | None
 
-# In backend/main.py
+class AgentChatRequest(BaseModel):
+    message: str
 
-@app.get("/api/order-status/{customer_name}", response_model=OrderStatusResponse)
+class AgentChatResponse(BaseModel):
+    reply: str
+
+# ==============================================================================
+# 4. API ENDPOINTS
+# These are the functions that handle incoming web requests to specific URLs.
+# ==============================================================================
+@app.get("/")
+def read_root():
+    """A simple endpoint to check if the server is running."""
+    return {"Status": "Online"}
+
+@app.get("/api/order-status/{customer_name}", response_model=OrderStatusResponse, summary="Get Order Status Directly")
 async def get_order_status(customer_name: str):
     """
     Acts as a secure proxy to call the GetOrderStatusFuzzy Azure Function.
     It authenticates using an API key and then robustly cleans the
     returned data before validation.
     """
-    target_url = f"{settings.function_url}?customer_name={customer_name}"
 
-    # 1. THE SECURITY CHANGE: Prepare the headers with the secret key.
-    #    'x-functions-key' is the specific header name Azure Functions requires.
+    # Configuration is loaded securely from the settings object.
+    target_url = f"{settings.function_url}?customer_name={customer_name}"
     headers = {
         'x-functions-key': settings.function_key
     }
 
     try:
+        # The `async with` block ensures the HTTP client connection is properly closed.
         async with httpx.AsyncClient() as client:
             # 2. THE EXECUTION CHANGE: Send the request WITH the headers.
             response = await client.get(target_url, headers=headers)
@@ -142,7 +104,7 @@ async def get_order_status(customer_name: str):
             # If we get here, the request was successful (status 200 OK).
             messy_data = response.json()
 
-        # --- This data cleaning logic is from our previous fix and is still correct ---
+        # This nested helper function makes our endpoint resilient.
         def to_float(value):
             if value is None or value == '':
                 return 0.0
@@ -172,30 +134,17 @@ async def get_order_status(customer_name: str):
             "lastUpdatedAt": messy_data.get("lastUpdatedAt")
         }
         
-        # FastAPI's Pydantic model will validate this clean dictionary.
+        # FastAPI validates our `clean_data` against the `OrderStatusResponse` model before sending.
         return clean_data
 
-    # This will catch network errors (e.g., function app is down)
-    except httpx.RequestError as e:
-        print(f"HTTP request to Azure Function failed: {e}")
-        raise HTTPException(status_code=503, detail="Service unavailable: Could not connect to the order status service.")
-    
-    # This will catch the 4xx/5xx errors raised by response.raise_for_status()
     except httpx.HTTPStatusError as e:
-        error_detail = e.response.json().get("detail", e.response.text)
-        print(f"Azure Function returned an error: {e.response.status_code} - {error_detail}")
-        raise HTTPException(status_code=e.response.status_code, detail=error_detail)
-
+        # This catches errors from the function call itself (e.g., function returned 404).
+        print(f"Azure Function returned an error: {e.response.status_code}")
+        raise HTTPException(status_code=502, detail="The order status service is currently unavailable.")
     except Exception as e:
+        # This is a general catch-all for any other unexpected errors.
         print(f"An unexpected error occurred in get_order_status: {e}")
         raise HTTPException(status_code=500, detail="An internal server error occurred.")
-
-# --- Pydantic Models for the new endpoint ---
-class AgentChatRequest(BaseModel):
-    message: str
-
-class AgentChatResponse(BaseModel):
-    reply: str
 
 @app.post("/api/chat-with-agent", response_model=AgentChatResponse)
 async def chat_proxy_to_azure_agent(request: AgentChatRequest):
@@ -208,12 +157,9 @@ async def chat_proxy_to_azure_agent(request: AgentChatRequest):
         #    This automatically finds your credentials from your environment.
         project = AIProjectClient(
             credential=DefaultAzureCredential(),
-            endpoint="https://businessaiagents-resource.services.ai.azure.com/api/projects/businessaiagents"
+            endpoint=settings.azure_ai_project_endpoint
         )
-
-        # 2. Get a reference to your specific agent by its ID
-        #    (You can hard-code this ID from the Azure portal)
-        agent = project.agents.get_agent("asst_k3iT84MhPHG4sk7jhMb3eDzv")
+        agent = project.agents.get_agent(settings.azure_ai_agent_name)
 
         # 3. Create a new, clean conversation thread for this interaction
         thread = project.agents.threads.create()
