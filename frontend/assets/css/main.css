@@ -1659,3 +1659,16 @@ input, select, textarea {
 		body.is-preload #footer {
 			opacity: 0;
 		}
+
+/* ================================== */
+/* === My Custom Mobile Fixes === */
+/* ================================== */
+
+/* This rule will override the template's default behavior for the major heading. */
+h2.major {
+    /* Reset the width so it can be flexible and fit the screen. */
+    width: auto; 
+    
+    /* Explicitly allow the text to wrap. */
+    white-space: normal;
+}
