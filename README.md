@@ -8,17 +8,25 @@ The live application provides a seamless user experience with two core features 
 
 ## 🚀 Live Demo
 
-**[You can interact with the live, deployed application here.](https://proud-ground-0066a270f.6.azurestaticapps.net)**
+**[You can interact with the live, deployed application here.](https://proud-ground-0066a270f.6.azurestaticapps.net/#)**
 
 ---
 
-## Architecture Diagram
+## Architecture Overview
 
 The application is built with a modern, decoupled, and secure architecture. A static frontend communicates with a custom Python backend that acts as a **secure proxy**. This proxy intelligently routes requests to the appropriate Azure service, ensuring that no sensitive credentials or complex logic are ever exposed to the client-side.
 
-**[>>> YOU MUST ADD A SCREENSHOT OF YOUR ARCHITECTURE DIAGRAM HERE <<<]**
+### Logical Flow
 
-*(To do this: Take a screenshot of the architecture diagram we developed. Upload it to the "Issues" tab of your GitHub repository. Then, copy the image address and use it to replace this text with Markdown: `![Architecture Diagram](URL_to_your_screenshot.png)`)*
+This diagram shows the high-level logical flow of a user request through the main application components.
+
+![Logical Application Architecture](./docs/images/architecture_logical.png)
+
+### Network & Security Architecture
+
+For a detailed, physical diagram showing the network topology, VNet configuration, private endpoints, and security boundaries, please see the full architecture document below.
+
+**[➡️ View Detailed Network & Security Architecture](./docs/ARCHITECTURE.md)**
 
 ### Data Flow
 
@@ -76,3 +84,68 @@ This project's final architecture is the result of a realistic and challenging d
 | **Hosting**    | Azure App Service, Azure Static Web Apps, Azure Functions|
 | **CI/CD**      | GitHub Actions (for the Static Web App)                  |
 | **Security**   | Azure AD Managed Identity, Azure Key Vault, Dependabot   |
+---
+
+## 🎥 Live Demo & Walkthrough
+
+A picture is worth a thousand words, and a video is worth a million. This short video demonstrates the live application in action, showcasing the AI chat, typo-tolerant order status lookups, and the seamless user experience.
+
+**[>>> YOU MUST EMBED YOUR VIDEO DEMO HERE <<<]**
+
+*(**To do this:** Record a short screen capture of you using the website. A tool like [Loom](https://www.loom.com/) is perfect for this as it's free and hosts the video for you. Once you have the video link, you can embed it here. If the platform supports it, use Markdown for a direct embed. A simple link is also great, like this: **[Watch the Live Demo on Loom](URL_to_your_video)**. A GIF is another fantastic option if the video is short.)*
+
+---
+
+## ⚙️ Local Development & Setup
+
+This repository is a monorepo containing both the `frontend` and `backend` code.
+
+### Prerequisites
+
+-   Node.js (for frontend tooling, if needed)
+-   Python 3.11+
+-   Docker Desktop
+-   An Azure account and the [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
+
+### Backend Setup (FastAPI Proxy)
+
+1.  Navigate to the `backend` directory: `cd backend`
+2.  Create and activate a Python virtual environment:
+    ```bash
+    python -m venv .venv
+    source .venv/bin/activate # On Windows: .venv\Scripts\activate
+    ```
+3.  Install dependencies: `pip install -r requirements.txt`
+4.  Create a `.env` file in the `backend` directory for local secrets. This file is git-ignored and is essential for local development.
+    ```env
+    # .env file for local development
+    AZURE_AI_PROJECT_ENDPOINT="your_ai_project_endpoint"
+    AZURE_AI_AGENT_NAME="your_agent_name"
+    FUNCTION_URL="your_azure_function_url"
+    FUNCTION_KEY="your_azure_function_key"
+    ```
+5.  Run the local server: `uvicorn main:app --reload`
+
+### Frontend Setup
+
+The frontend is built with vanilla HTML, CSS, and JavaScript and requires no complex build steps.
+
+1.  You can run it locally using a simple live server. If you have VS Code, the **[Live Server extension](https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer)** is an excellent choice.
+2.  Open the `frontend/index.html` file.
+3.  Right-click and select "Open with Live Server".
+4.  **Important:** Ensure the `API_BASE_URL` and `AGENT_PROXY_ENDPOINT` constants in your `.js` files are pointing to your locally running backend server (e.g., `http://127.0.0.1:8000`) for local testing.
+
+---
+
+## Deployment
+
+The application is deployed using a combination of services and methods, demonstrating a hybrid deployment strategy:
+
+-   **Frontend:** Deployed via **Azure Static Web Apps**. This service is linked directly to this GitHub repository. A GitHub Actions workflow automatically builds and deploys any changes pushed to the `main` branch.
+-   **Backend:** The Dockerized FastAPI application is deployed to **Azure App Service for Containers**. The process involves:
+    1.  Building the Docker image locally.
+    2.  Pushing the image to a private **Azure Container Registry (ACR)**.
+    3.  Configuring the App Service to pull and run the latest image from ACR.
+-   **Serverless Tool:** The Azure Function is deployed directly from its own repository using the Azure Functions extension in VS Code.
+
+This multi-faceted deployment strategy reflects a real-world scenario where different components of an application have different deployment needs and lifecycles.
