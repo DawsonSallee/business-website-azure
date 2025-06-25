@@ -94,8 +94,11 @@ async def get_order_status(customer_name: str):
     try:
         # The `async with` block ensures the HTTP client connection is properly closed.
         async with httpx.AsyncClient() as client:
+
+            timeout = httpx.Timeout(30.0, connect=60.0)
+
             # 2. THE EXECUTION CHANGE: Send the request WITH the headers.
-            response = await client.get(target_url, headers=headers)
+            response = await client.get(target_url, headers=headers, timeout=timeout)
 
             # A more robust way to check for errors. This will automatically raise
             # an exception for any 4xx (client) or 5xx (server) error codes.

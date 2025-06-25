@@ -9,6 +9,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const statusForm = document.getElementById('order-status-form');
     const nameInput = document.getElementById('customer-name');
     const resultsContainer = document.getElementById('results-container');
+
+    // <<< NEW: Add this helper function to anonymize the name
+    const anonymizeName = (fullName) => {
+        if (!fullName || typeof fullName !== 'string') return 'N/A'; // Safety check
+        const parts = fullName.trim().split(' ');
+        if (parts.length < 2) {
+            return fullName; // Handles single names correctly
+        }
+        const firstName = parts[0];
+        const lastNameInitial = parts[1].charAt(0); // Gets the first letter of the last name
+        return `${firstName} ${lastNameInitial}.`; // Returns "Annie C."
+    };
     
     // Make sure all elements were found before adding the event listener
     if (statusForm && nameInput && resultsContainer) {
@@ -59,10 +71,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     const totalDeposit = (data.depositCash || 0) + (data.depositCheck || 0);
                     const subsequentPayments = (data.paymentCash || 0) + (data.paymentCheck || 0);
 
+                    const displayName = anonymizeName(data.customerName);
+
                     resultsContainer.innerHTML = `
                         <div class="status-receipt">
                             <div class="receipt-header">
-                                <h3>Order Status for ${data.customerName}</h3>                                
+                                <h3>Order Status for ${displayName}</h3>                                
                                 <div class="receipt-line"><span><strong>Order Date: </strong></span><span>${formatDate(data.orderDate)}</span></div>
                                 <div class="receipt-line"><span><strong>Ready for Pickup: </strong></span><span>${formatDate(data.readyDate)}</span></div>
                                 <div class="receipt-line"><span><strong>Customer Called: </strong></span><span>${formatDate(data.calledDate)}</span></div>
