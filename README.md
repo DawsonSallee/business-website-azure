@@ -8,9 +8,7 @@ The live application provides a seamless user experience with two core features 
 
 ## 🚀 Live Demo
 
-**[You can interact with the live, deployed application here.](https://proud-ground-0066a270f.6.azurestaticapps.net/#)**
-
----
+![Live Application Demo](./docs/images/project_demo.gif)
 
 ## Architecture Overview
 
