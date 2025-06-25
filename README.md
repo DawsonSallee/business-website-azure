@@ -88,9 +88,7 @@ This project's final architecture is the result of a realistic and challenging d
 
 A picture is worth a thousand words, and a video is worth a million. This short video demonstrates the live application in action, showcasing the AI chat, typo-tolerant order status lookups, and the seamless user experience.
 
-**[>>> YOU MUST EMBED YOUR VIDEO DEMO HERE <<<]**
-
-*(**To do this:** Record a short screen capture of you using the website. A tool like [Loom](https://www.loom.com/) is perfect for this as it's free and hosts the video for you. Once you have the video link, you can embed it here. If the platform supports it, use Markdown for a direct embed. A simple link is also great, like this: **[Watch the Live Demo on Loom](URL_to_your_video)**. A GIF is another fantastic option if the video is short.)*
+![Live Application Demo](./docs/images/project_demo.gif)
 
 ---
 
