@@ -41,6 +41,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # ==============================================================================
 # 3. PYDANTIC MODELS (Data Contracts)
 # These classes define the expected JSON structure for API requests and
